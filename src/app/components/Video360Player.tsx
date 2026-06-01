@@ -12,10 +12,10 @@ interface Video360PlayerProps {
 
 const videoData: Record<string, { url: string }> = {
   ximena: {
-    url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    url: "https://www.youtube.com/watch?si=JoDnj6UNakCt0FS_&v=cwnMVzFnUO4&feature=youtu.be"
   },
   "cuerpo-humano": {
-    url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    url: "https://www.youtube.com/watch?si=JoDnj6UNakCt0FS_&v=cwnMVzFnUO4&feature=youtu.be"
   },
   tercera: {
     url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
