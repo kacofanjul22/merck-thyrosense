@@ -9,16 +9,16 @@ interface Video360PlayerProps {
   language: LanguageCode;
 }
 
-// Vinculamos todas las secciones al video 360 optimizado de Dropbox que nos pasaste
+// Enlace de Dropbox corregido para saltarse el CORS usando el dominio directo "dl.dropboxusercontent.com"
 const videoData: Record<string, { url: string }> = {
   ximena: {
-    url: "https://www.dropbox.com/scl/fi/hy1muqmxg7t03a1ww7rkf/Thyrosense360-Espa-ol.mp4?rlkey=ra9733pxfiud4yvw42vfbqann&st=4c3g6ygl&raw=1"
+    url: "https://dl.dropboxusercontent.com/scl/fi/hy1muqmxg7t03a1ww7rkf/Thyrosense360-Espa-ol.mp4?rlkey=ra9733pxfiud4yvw42vfbqann"
   },
   "cuerpo-humano": {
-    url: "https://www.dropbox.com/scl/fi/hy1muqmxg7t03a1ww7rkf/Thyrosense360-Espa-ol.mp4?rlkey=ra9733pxfiud4yvw42vfbqann&st=4c3g6ygl&raw=1"
+    url: "https://dl.dropboxusercontent.com/scl/fi/hy1muqmxg7t03a1ww7rkf/Thyrosense360-Espa-ol.mp4?rlkey=ra9733pxfiud4yvw42vfbqann"
   },
   tercera: {
-    url: "https://www.dropbox.com/scl/fi/hy1muqmxg7t03a1ww7rkf/Thyrosense360-Espa-ol.mp4?rlkey=ra9733pxfiud4yvw42vfbqann&st=4c3g6ygl&raw=1"
+    url: "https://dl.dropboxusercontent.com/scl/fi/hy1muqmxg7t03a1ww7rkf/Thyrosense360-Espa-ol.mp4?rlkey=ra9733pxfiud4yvw42vfbqann"
   }
 };
 
@@ -39,7 +39,7 @@ export function Video360Player({ contentId, onClose, language }: Video360PlayerP
       ? t.contentSelector.cuerpoHumano.title
       : t.contentSelector.tercera.title;
 
-  // 1. Cargar A-Frame de forma dinámica en el navegador para que no de errores al compilar
+  // 1. Cargar A-Frame de forma dinámica en el navegador
   useEffect(() => {
     if ((window as any).AFRAME) {
       setScriptLoaded(true);
@@ -57,18 +57,18 @@ export function Video360Player({ contentId, onClose, language }: Video360PlayerP
     document.head.appendChild(script);
   }, []);
 
-  // 2. Detectar si el dispositivo es móvil para mostrar la pantalla de permisos
+  // 2. Detectar si el dispositivo es móvil para el overlay de permisos
   useEffect(() => {
     const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     if (isMobileDevice) {
       setShowMobileOverlay(true);
-      setPlaying(false); // No reproducir automáticamente en móviles
+      setPlaying(false);
     } else {
-      setPlaying(true);  // En PC reproduce automáticamente
+      setPlaying(true);
     }
   }, []);
 
-  // 3. Sincronizar los cambios de Play / Pause con el elemento de video nativo de A-Frame
+  // 3. Controlar la reproducción del video nativo
   useEffect(() => {
     if (!scriptLoaded) return;
     const videoEl = document.getElementById("video360-element") as HTMLVideoElement | null;
@@ -81,7 +81,7 @@ export function Video360Player({ contentId, onClose, language }: Video360PlayerP
     }
   }, [playing, scriptLoaded]);
 
-  // 4. Sincronizar el control de silencio (Mute) con el video nativo
+  // 4. Sincronizar el silencio (Mute) con el video nativo
   useEffect(() => {
     if (!scriptLoaded) return;
     const videoEl = document.getElementById("video360-element") as HTMLVideoElement | null;
@@ -90,9 +90,8 @@ export function Video360Player({ contentId, onClose, language }: Video360PlayerP
     }
   }, [muted, scriptLoaded]);
 
-  // 5. Manejar el inicio interactivo en móviles (Giroscopio + Reproducción)
+  // 5. Iniciar en móviles (Permisos + Play)
   const handleStartMobile = async () => {
-    // Pedir permiso explícito de orientación para iPhones (iOS 13+)
     if (
       typeof DeviceOrientationEvent !== "undefined" &&
       typeof DeviceOrientationEvent.requestPermission === "function"
@@ -100,21 +99,16 @@ export function Video360Player({ contentId, onClose, language }: Video360PlayerP
       try {
         const permission = await DeviceOrientationEvent.requestPermission();
         if (permission !== "granted") {
-          alert("Permiso de giroscopio denegado. Podrás mover el video arrastrando con tu dedo.");
+          alert("Permiso de giroscopio denegado. Podrás arrastrar el video con tu dedo.");
         }
       } catch (error) {
-        console.error("Error pidiendo permisos de movimiento:", error);
+        console.error("Error pidiendo permisos:", error);
       }
     }
 
-    // Ocultamos la pantalla de bienvenida de móvil y arrancamos el video con volumen activo
     setShowMobileOverlay(false);
     setMuted(false);
     setPlaying(true);
-  };
-
-  const handleError = (error: any) => {
-    console.error("Video player error:", error);
   };
 
   return (
@@ -127,7 +121,7 @@ export function Video360Player({ contentId, onClose, language }: Video360PlayerP
       onMouseLeave={() => setShowControls(false)}
     >
       <div className="relative w-full h-full">
-        {/* Renderizado de A-Frame usando inyección segura de HTML en React para evitar errores de TypeScript */}
+        {/* Renderizado de A-Frame */}
         {scriptLoaded ? (
           <div
             className="w-full h-full absolute inset-0"
@@ -136,7 +130,7 @@ export function Video360Player({ contentId, onClose, language }: Video360PlayerP
                 <a-scene embedded vr-mode-ui="enabled: false" style="width: 100%; height: 100%;">
                   <a-assets>
                     <video id="video360-element" src="${video.url}" 
-                           loop crossorigin="anonymous" playsinline webkit-playsinline muted>
+                           loop crossorigin="anonymous" preload="auto" playsinline webkit-playsinline muted>
                     </video>
                   </a-assets>
                   <a-videosphere src="#video360-element" rotation="0 -90 0"></a-videosphere>
@@ -151,7 +145,7 @@ export function Video360Player({ contentId, onClose, language }: Video360PlayerP
           </div>
         )}
 
-        {/* Pantalla de bienvenida móvil obligatoria para activar Giroscopio (Evita bloqueos de navegador) */}
+        {/* Pantalla de bienvenida móvil (Giroscopio) */}
         {showMobileOverlay && (
           <div className="absolute inset-0 z-[60] flex flex-col items-center justify-center bg-black/95 px-6 text-center backdrop-blur-md">
             <motion.div
@@ -178,11 +172,11 @@ export function Video360Player({ contentId, onClose, language }: Video360PlayerP
           </div>
         )}
 
-        {/* Controles de Reproducción Clásicos */}
+        {/* Controles de Reproducción */}
         <AnimatePresence>
           {showControls && !showMobileOverlay && (
             <>
-              {/* Barra superior (Título y Cerrar) */}
+              {/* Barra superior */}
               <motion.div
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -207,7 +201,7 @@ export function Video360Player({ contentId, onClose, language }: Video360PlayerP
                 </div>
               </motion.div>
 
-              {/* Barra inferior (Play, Mute, Fullscreen) */}
+              {/* Barra inferior */}
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
