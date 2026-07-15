@@ -1,7 +1,6 @@
 import { motion, AnimatePresence } from "motion/react";
-import ReactPlayer from "react-player";
 import { X, Maximize2, Volume2, VolumeX, Play, Pause } from "lucide-react";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { translations, LanguageCode } from "../translations";
 
 interface Video360PlayerProps {
@@ -10,15 +9,16 @@ interface Video360PlayerProps {
   language: LanguageCode;
 }
 
+// Vinculamos todas las secciones al video 360 optimizado de Dropbox que nos pasaste
 const videoData: Record<string, { url: string }> = {
   ximena: {
-    url: "https://www.youtube.com/watch?si=JoDnj6UNakCt0FS_&v=cwnMVzFnUO4&feature=youtu.be"
+    url: "https://www.dropbox.com/scl/fi/hy1muqmxg7t03a1ww7rkf/Thyrosense360-Espa-ol.mp4?rlkey=ra9733pxfiud4yvw42vfbqann&st=4c3g6ygl&raw=1"
   },
   "cuerpo-humano": {
-    url: "https://www.youtube.com/watch?si=JoDnj6UNakCt0FS_&v=cwnMVzFnUO4&feature=youtu.be"
+    url: "https://www.dropbox.com/scl/fi/hy1muqmxg7t03a1ww7rkf/Thyrosense360-Espa-ol.mp4?rlkey=ra9733pxfiud4yvw42vfbqann&st=4c3g6ygl&raw=1"
   },
   tercera: {
-    url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    url: "https://www.dropbox.com/scl/fi/hy1muqmxg7t03a1ww7rkf/Thyrosense360-Espa-ol.mp4?rlkey=ra9733pxfiud4yvw42vfbqann&st=4c3g6ygl&raw=1"
   }
 };
 
@@ -27,7 +27,8 @@ export function Video360Player({ contentId, onClose, language }: Video360PlayerP
   const [muted, setMuted] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [isReady, setIsReady] = useState(false);
-  const playerRef = useRef<ReactPlayer>(null);
+  const [scriptLoaded, setScriptLoaded] = useState(false);
+  const [showMobileOverlay, setShowMobileOverlay] = useState(false);
 
   const video = videoData[contentId];
   const t = translations[language];
@@ -38,8 +39,77 @@ export function Video360Player({ contentId, onClose, language }: Video360PlayerP
       ? t.contentSelector.cuerpoHumano.title
       : t.contentSelector.tercera.title;
 
-  const handleReady = () => {
-    setIsReady(true);
+  // 1. Cargar A-Frame de forma dinámica en el navegador para que no de errores al compilar
+  useEffect(() => {
+    if ((window as any).AFRAME) {
+      setScriptLoaded(true);
+      setIsReady(true);
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = "https://aframe.io/releases/1.4.0/aframe.min.js";
+    script.async = true;
+    script.onload = () => {
+      setScriptLoaded(true);
+      setIsReady(true);
+    };
+    document.head.appendChild(script);
+  }, []);
+
+  // 2. Detectar si el dispositivo es móvil para mostrar la pantalla de permisos
+  useEffect(() => {
+    const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    if (isMobileDevice) {
+      setShowMobileOverlay(true);
+      setPlaying(false); // No reproducir automáticamente en móviles
+    } else {
+      setPlaying(true);  // En PC reproduce automáticamente
+    }
+  }, []);
+
+  // 3. Sincronizar los cambios de Play / Pause con el elemento de video nativo de A-Frame
+  useEffect(() => {
+    if (!scriptLoaded) return;
+    const videoEl = document.getElementById("video360-element") as HTMLVideoElement | null;
+    if (videoEl) {
+      if (playing) {
+        videoEl.play().catch((err) => console.log("Error al reproducir video:", err));
+      } else {
+        videoEl.pause();
+      }
+    }
+  }, [playing, scriptLoaded]);
+
+  // 4. Sincronizar el control de silencio (Mute) con el video nativo
+  useEffect(() => {
+    if (!scriptLoaded) return;
+    const videoEl = document.getElementById("video360-element") as HTMLVideoElement | null;
+    if (videoEl) {
+      videoEl.muted = muted;
+    }
+  }, [muted, scriptLoaded]);
+
+  // 5. Manejar el inicio interactivo en móviles (Giroscopio + Reproducción)
+  const handleStartMobile = async () => {
+    // Pedir permiso explícito de orientación para iPhones (iOS 13+)
+    if (
+      typeof DeviceOrientationEvent !== "undefined" &&
+      typeof DeviceOrientationEvent.requestPermission === "function"
+    ) {
+      try {
+        const permission = await DeviceOrientationEvent.requestPermission();
+        if (permission !== "granted") {
+          alert("Permiso de giroscopio denegado. Podrás mover el video arrastrando con tu dedo.");
+        }
+      } catch (error) {
+        console.error("Error pidiendo permisos de movimiento:", error);
+      }
+    }
+
+    // Ocultamos la pantalla de bienvenida de móvil y arrancamos el video con volumen activo
+    setShowMobileOverlay(false);
+    setMuted(false);
     setPlaying(true);
   };
 
@@ -57,36 +127,67 @@ export function Video360Player({ contentId, onClose, language }: Video360PlayerP
       onMouseLeave={() => setShowControls(false)}
     >
       <div className="relative w-full h-full">
-        <ReactPlayer
-          ref={playerRef}
-          url={video.url}
-          playing={playing}
-          muted={muted}
-          width="100%"
-          height="100%"
-          controls={false}
-          onReady={handleReady}
-          onError={handleError}
-          playsinline
-          config={{
-            youtube: {
-              playerVars: {
-                modestbranding: 1,
-                rel: 0,
-                playsinline: 1
-              }
-            }
-          }}
-        />
+        {/* Renderizado de A-Frame usando inyección segura de HTML en React para evitar errores de TypeScript */}
+        {scriptLoaded ? (
+          <div
+            className="w-full h-full absolute inset-0"
+            dangerouslySetInnerHTML={{
+              __html: `
+                <a-scene embedded vr-mode-ui="enabled: false" style="width: 100%; height: 100%;">
+                  <a-assets>
+                    <video id="video360-element" src="${video.url}" 
+                           loop crossorigin="anonymous" playsinline webkit-playsinline muted>
+                    </video>
+                  </a-assets>
+                  <a-videosphere src="#video360-element" rotation="0 -90 0"></a-videosphere>
+                  <a-camera look-controls="magicWindowTrackingEnabled: true; touchEnabled: true;"></a-camera>
+                </a-scene>
+              `
+            }}
+          />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center text-white text-sm">
+            Cargando reproductor 360°...
+          </div>
+        )}
 
+        {/* Pantalla de bienvenida móvil obligatoria para activar Giroscopio (Evita bloqueos de navegador) */}
+        {showMobileOverlay && (
+          <div className="absolute inset-0 z-[60] flex flex-col items-center justify-center bg-black/95 px-6 text-center backdrop-blur-md">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="max-w-md space-y-6"
+            >
+              <span className="inline-block px-3 py-1 rounded-full bg-violet-600 text-white text-xs font-semibold tracking-wider uppercase animate-pulse">
+                Experiencia 360°
+              </span>
+              <h2 className="text-white text-2xl sm:text-3xl font-bold font-sans">
+                {videoTitle}
+              </h2>
+              <p className="text-white/60 text-sm sm:text-base">
+                Para disfrutar de la inmersión total, activa los sensores de movimiento de tu dispositivo.
+              </p>
+              <button
+                onClick={handleStartMobile}
+                className="w-full sm:w-auto px-8 py-4 bg-violet-600 text-white font-bold rounded-full shadow-lg shadow-violet-600/30 hover:bg-violet-500 transition-all active:scale-95 text-base sm:text-lg"
+              >
+                Comenzar Experiencia
+              </button>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Controles de Reproducción Clásicos */}
         <AnimatePresence>
-          {showControls && (
+          {showControls && !showMobileOverlay && (
             <>
+              {/* Barra superior (Título y Cerrar) */}
               <motion.div
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
-                className="absolute top-0 left-0 right-0 bg-gradient-to-b from-black/80 to-transparent p-6"
+                className="absolute top-0 left-0 right-0 bg-gradient-to-b from-black/80 to-transparent p-6 z-[55]"
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 sm:gap-4">
@@ -106,11 +207,12 @@ export function Video360Player({ contentId, onClose, language }: Video360PlayerP
                 </div>
               </motion.div>
 
+              {/* Barra inferior (Play, Mute, Fullscreen) */}
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 20 }}
-                className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-6"
+                className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-6 z-[55]"
               >
                 <div className="flex items-center justify-center gap-3 sm:gap-4">
                   <motion.button
@@ -170,7 +272,8 @@ export function Video360Player({ contentId, onClose, language }: Video360PlayerP
           )}
         </AnimatePresence>
 
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
+        {/* Punto de referencia central */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-[51]">
           <motion.div
             initial={{ scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 0.3 }}
