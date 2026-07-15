@@ -9,16 +9,16 @@ interface Video360PlayerProps {
   language: LanguageCode;
 }
 
-// Enlace de Dropbox corregido para saltarse el CORS usando el dominio directo "dl.dropboxusercontent.com"
+// Enlace de Dropbox directo y optimizado para streaming 3D
 const videoData: Record<string, { url: string }> = {
   ximena: {
-    url: "https://dl.dropboxusercontent.com/scl/fi/hy1muqmxg7t03a1ww7rkf/Thyrosense360-Espa-ol.mp4?rlkey=ra9733pxfiud4yvw42vfbqann"
+    url: "https://dl.dropboxusercontent.com/scl/fi/hy1muqmxg7t03a1ww7rkf/Thyrosense360-Espa-ol.mp4?rlkey=ra9733pxfiud4yvw42vfbqann&st=mksfy28a&raw=1"
   },
   "cuerpo-humano": {
-    url: "https://dl.dropboxusercontent.com/scl/fi/hy1muqmxg7t03a1ww7rkf/Thyrosense360-Espa-ol.mp4?rlkey=ra9733pxfiud4yvw42vfbqann"
+    url: "https://dl.dropboxusercontent.com/scl/fi/hy1muqmxg7t03a1ww7rkf/Thyrosense360-Espa-ol.mp4?rlkey=ra9733pxfiud4yvw42vfbqann&st=mksfy28a&raw=1"
   },
   tercera: {
-    url: "https://dl.dropboxusercontent.com/scl/fi/hy1muqmxg7t03a1ww7rkf/Thyrosense360-Espa-ol.mp4?rlkey=ra9733pxfiud4yvw42vfbqann"
+    url: "https://dl.dropboxusercontent.com/scl/fi/hy1muqmxg7t03a1ww7rkf/Thyrosense360-Espa-ol.mp4?rlkey=ra9733pxfiud4yvw42vfbqann&st=mksfy28a&raw=1"
   }
 };
 
@@ -39,7 +39,7 @@ export function Video360Player({ contentId, onClose, language }: Video360PlayerP
       ? t.contentSelector.cuerpoHumano.title
       : t.contentSelector.tercera.title;
 
-  // 1. Cargar A-Frame de forma dinámica en el navegador
+  // 1. Cargar el motor A-Frame
   useEffect(() => {
     if ((window as any).AFRAME) {
       setScriptLoaded(true);
@@ -57,31 +57,31 @@ export function Video360Player({ contentId, onClose, language }: Video360PlayerP
     document.head.appendChild(script);
   }, []);
 
-  // 2. Detectar si el dispositivo es móvil para el overlay de permisos
+  // 2. Detectar si es celular para mostrar la pantalla de inicio interactivo
   useEffect(() => {
     const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     if (isMobileDevice) {
       setShowMobileOverlay(true);
-      setPlaying(false);
+      setPlaying(false); 
     } else {
-      setPlaying(true);
+      setPlaying(true); // En PC arranca solo
     }
   }, []);
 
-  // 3. Controlar la reproducción del video nativo
+  // 3. Control de reproducción estándar (para pausar/reproducir con los controles después de iniciar)
   useEffect(() => {
-    if (!scriptLoaded) return;
+    if (!scriptLoaded || showMobileOverlay) return;
     const videoEl = document.getElementById("video360-element") as HTMLVideoElement | null;
     if (videoEl) {
       if (playing) {
-        videoEl.play().catch((err) => console.log("Error al reproducir video:", err));
+        videoEl.play().catch((err) => console.log("Error al reproducir:", err));
       } else {
         videoEl.pause();
       }
     }
-  }, [playing, scriptLoaded]);
+  }, [playing, scriptLoaded, showMobileOverlay]);
 
-  // 4. Sincronizar el silencio (Mute) con el video nativo
+  // 4. Sincronizar el silencio (Mute)
   useEffect(() => {
     if (!scriptLoaded) return;
     const videoEl = document.getElementById("video360-element") as HTMLVideoElement | null;
@@ -90,25 +90,41 @@ export function Video360Player({ contentId, onClose, language }: Video360PlayerP
     }
   }, [muted, scriptLoaded]);
 
-  // 5. Iniciar en móviles (Permisos + Play)
+  // 5. INICIO EN MÓVILES: El truco para saltarse el bloqueo de seguridad
   const handleStartMobile = async () => {
+    // Pedir permisos de giroscopio de inmediato en el clic
     if (
       typeof DeviceOrientationEvent !== "undefined" &&
       typeof DeviceOrientationEvent.requestPermission === "function"
     ) {
       try {
-        const permission = await DeviceOrientationEvent.requestPermission();
-        if (permission !== "granted") {
-          alert("Permiso de giroscopio denegado. Podrás arrastrar el video con tu dedo.");
-        }
+        await DeviceOrientationEvent.requestPermission();
       } catch (error) {
-        console.error("Error pidiendo permisos:", error);
+        console.error("Error de sensores:", error);
       }
     }
 
-    setShowMobileOverlay(false);
-    setMuted(false);
-    setPlaying(true);
+    // REPRODUCCIÓN INMEDIATA (Síncrona): Engaña al navegador del celular para que reproduzca al instante
+    const videoEl = document.getElementById("video360-element") as HTMLVideoElement | null;
+    if (videoEl) {
+      videoEl.muted = false; // Arranca con sonido directo
+      videoEl.play()
+        .then(() => {
+          setShowMobileOverlay(false);
+          setMuted(false);
+          setPlaying(true);
+        })
+        .catch((err) => {
+          console.error("Fallo la reproducción síncrona:", err);
+          // Si falla con sonido por políticas extremas, intentamos reproducir en silencio
+          videoEl.muted = true;
+          videoEl.play().then(() => {
+            setShowMobileOverlay(false);
+            setMuted(true);
+            setPlaying(true);
+          });
+        });
+    }
   };
 
   return (
@@ -145,7 +161,7 @@ export function Video360Player({ contentId, onClose, language }: Video360PlayerP
           </div>
         )}
 
-        {/* Pantalla de bienvenida móvil (Giroscopio) */}
+        {/* Pantalla de bienvenida móvil (Para activar el Giroscopio) */}
         {showMobileOverlay && (
           <div className="absolute inset-0 z-[60] flex flex-col items-center justify-center bg-black/95 px-6 text-center backdrop-blur-md">
             <motion.div
@@ -172,7 +188,7 @@ export function Video360Player({ contentId, onClose, language }: Video360PlayerP
           </div>
         )}
 
-        {/* Controles de Reproducción */}
+        {/* Controles del Reproductor */}
         <AnimatePresence>
           {showControls && !showMobileOverlay && (
             <>
@@ -266,7 +282,7 @@ export function Video360Player({ contentId, onClose, language }: Video360PlayerP
           )}
         </AnimatePresence>
 
-        {/* Punto de referencia central */}
+        {/* Punto de mira central */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-[51]">
           <motion.div
             initial={{ scale: 0, opacity: 0 }}
